@@ -1,6 +1,9 @@
 #pragma once
 #include "Generator.h"
 
+#include <vector>
+#include <limits>
+
 namespace FastNoise
 {
     class DomainScale : public virtual Generator
@@ -228,6 +231,82 @@ namespace FastNoise
             description =
                 "Remaps the output value of the source generator from one range to another\n"
                 "Optionally clamps output to the To Min/Max range";
+        }
+    };
+#endif
+
+    class Ramp : public virtual Generator
+    {
+    public:
+        const Metadata& GetMetadata() const override;
+
+        void SetSource( SmartNodeArg<> gen ) { this->SetSourceMemberVariable( mSource, gen ); }
+
+        void SetInputMin( float value ) { mInputMin = value; }
+        void SetInputMin( SmartNodeArg<> gen ) { this->SetSourceMemberVariable( mInputMin, gen ); }
+        void SetInputMax( float value ) { mInputMax = value; }
+        void SetInputMax( SmartNodeArg<> gen ) { this->SetSourceMemberVariable( mInputMax, gen ); }
+        void SetOutputMin( float value ) { mOutputMin = value; }
+        void SetOutputMin( SmartNodeArg<> gen ) { this->SetSourceMemberVariable( mOutputMin, gen ); }
+        void SetOutputMax( float value ) { mOutputMax = value; }
+        void SetOutputMax( SmartNodeArg<> gen ) { this->SetSourceMemberVariable( mOutputMax, gen ); }
+
+        // Side-channel setter (the metadata system has no array member type): the
+        // artist-edited ramp as control points in normalised [0,1] space.
+        void SetPoints( const float* xs, const float* ys, int count )
+        {
+            mPointX.clear();
+            mPointY.clear();
+            if( !xs || !ys || count < 2 )
+            {
+                mPointX = { 0.0f, 1.0f };
+                mPointY = { 0.0f, 1.0f };
+                return;
+            }
+            if( count > 64 ) count = 64;
+            // Keep x strictly increasing so the segment divide can't hit zero.
+            float prevX = -std::numeric_limits<float>::infinity();
+            for( int i = 0; i < count; i++ )
+            {
+                float x = xs[i] <= prevX ? prevX + 1e-6f : xs[i];
+                mPointX.push_back( x );
+                mPointY.push_back( ys[i] );
+                prevX = x;
+            }
+        }
+
+    protected:
+        GeneratorSource mSource;
+        HybridSource mInputMin = -1.0f;
+        HybridSource mInputMax = 1.0f;
+        HybridSource mOutputMin = 0.0f;
+        HybridSource mOutputMax = 1.0f;
+        std::vector<float> mPointX = { 0.0f, 1.0f };
+        std::vector<float> mPointY = { 0.0f, 1.0f };
+
+        template<typename T>
+        friend struct MetadataT;
+    };
+
+#ifdef FASTNOISE_METADATA
+    template<>
+    struct MetadataT<Ramp> : MetadataT<Generator>
+    {
+        SmartNode<> CreateNode( FastSIMD::FeatureSet ) const override;
+
+        MetadataT()
+        {
+            groups.push_back( "Modifiers" );
+            this->AddGeneratorSource( "Source", &Ramp::SetSource );
+            this->AddHybridSource( { "Input Min", "Lower bound of the input range mapped onto the ramp" }, -1.0f, &Ramp::SetInputMin, &Ramp::SetInputMin );
+            this->AddHybridSource( { "Input Max", "Upper bound of the input range mapped onto the ramp" }, 1.0f, &Ramp::SetInputMax, &Ramp::SetInputMax );
+            this->AddHybridSource( { "Output Min", "Output value at the bottom of the ramp" }, 0.0f, &Ramp::SetOutputMin, &Ramp::SetOutputMin );
+            this->AddHybridSource( { "Output Max", "Output value at the top of the ramp" }, 1.0f, &Ramp::SetOutputMax, &Ramp::SetOutputMax );
+
+            description =
+                "Remaps the source through an artist-editable ramp curve\n"
+                "Input is normalised between Input Min/Max (clamped), passed through the\n"
+                "ramp control points, then scaled to the Output Min/Max range";
         }
     };
 #endif

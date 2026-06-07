@@ -426,6 +426,21 @@ FASTNOISE_API bool fnSetVariableFloat( void* node, int variableIndex, float valu
  */
 FASTNOISE_API bool fnSetVariableIntEnum( void* node, int variableIndex, int value );
 
+/** @brief Set the control points of a Ramp node instance.
+ *
+ *  Side-channel setter for the Ramp node's editable curve, which the metadata
+ *  system cannot express as an array member. Points are in normalised [0,1]
+ *  space and should be sorted ascending by x; they are sanitised to be strictly
+ *  increasing. Note this does NOT round-trip through encoded node trees.
+ *
+ *  @param node     Node handle, must be a Ramp node.
+ *  @param xPoints  Array of x positions (length count).
+ *  @param yPoints  Array of y values (length count).
+ *  @param count    Number of control points (>= 2, otherwise a 0->1 ramp is used).
+ *  @return true on success, false if the node is not a Ramp.
+ */
+FASTNOISE_API bool fnRampSetPoints( void* node, const float* xPoints, const float* yPoints, int count );
+
 /** @brief Get the number of required node lookup (source) inputs on a node type.
  *
  *  Node lookups are generator source inputs that MUST be connected to another node

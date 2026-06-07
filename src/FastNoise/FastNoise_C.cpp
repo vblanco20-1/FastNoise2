@@ -238,6 +238,16 @@ bool fnSetVariableIntEnum( void* node, int variableIndex, int value )
     return false;
 }
 
+bool fnRampSetPoints( void* node, const float* xPoints, const float* yPoints, int count )
+{
+    if( FastNoise::Ramp* ramp = dynamic_cast<FastNoise::Ramp*>( ToGen( node ) ) )
+    {
+        ramp->SetPoints( xPoints, yPoints, count );
+        return true;
+    }
+    return false;
+}
+
 int fnGetMetadataNodeLookupCount( int id )
 {
     if( const FastNoise::Metadata* metadata = FastNoise::Metadata::GetFromId( (FastNoise::Metadata::node_id)id ) )

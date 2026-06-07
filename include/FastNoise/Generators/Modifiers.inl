@@ -100,6 +100,51 @@ class FastSIMD::DispatchClass<Remap, SIMD> final : public virtual Remap, public 
 };
 
 template<FastSIMD::FeatureSet SIMD>
+class FastSIMD::DispatchClass<Ramp, SIMD> final : public virtual Ramp, public DispatchClass<Generator, SIMD>
+{
+    FASTNOISE_IMPL_GEN_T;
+
+    template<typename... P>
+    FS_FORCEINLINE float32v GenT( int32v seed, P... pos ) const
+    {
+        float32v source = this->GetSourceValue( mSource, seed, pos... );
+        float32v inMin = this->GetSourceValue( mInputMin, seed, pos... );
+        float32v inMax = this->GetSourceValue( mInputMax, seed, pos... );
+        float32v outMin = this->GetSourceValue( mOutputMin, seed, pos... );
+        float32v outMax = this->GetSourceValue( mOutputMax, seed, pos... );
+
+        // Normalise into [0,1] across the input range, clamped at the ends
+        float32v t = ( source - inMin ) / ( inMax - inMin );
+        t = FS::Max( t, float32v( 0.0f ) );
+        t = FS::Min( t, float32v( 1.0f ) );
+
+        // Bruteforce search: each segment overwrites where t has passed its start
+        // x, so the last matching segment wins and t past the end clamps to py[n-1]
+        const float* px = this->mPointX.data();
+        const float* py = this->mPointY.data();
+        int count = (int)this->mPointX.size();
+
+        float32v y = float32v( py[0] );
+        for( int i = 0; i < count - 1; i++ )
+        {
+            float32v x0( px[i] );
+            float32v x1( px[i + 1] );
+            float32v y0( py[i] );
+            float32v y1( py[i + 1] );
+
+            float32v seg = ( t - x0 ) / ( x1 - x0 );
+            seg = FS::Max( seg, float32v( 0.0f ) );
+            seg = FS::Min( seg, float32v( 1.0f ) );
+            float32v segY = FS::FMulAdd( seg, y1 - y0, y0 );
+
+            y = FS::Select( t >= x0, segY, y );
+        }
+
+        return FS::FMulAdd( y, outMax - outMin, outMin );
+    }
+};
+
+template<FastSIMD::FeatureSet SIMD>
 class FastSIMD::DispatchClass<ConvertRGBA8, SIMD> final : public virtual ConvertRGBA8, public DispatchClass<Generator, SIMD>
 {
     FASTNOISE_IMPL_GEN_T;
