@@ -311,6 +311,46 @@ namespace FastNoise
     };
 #endif
 
+    class Clamp : public virtual Generator
+    {
+    public:
+        const Metadata& GetMetadata() const override;
+
+        void SetSource( SmartNodeArg<> gen ) { this->SetSourceMemberVariable( mSource, gen ); }
+
+        void SetMin( float value ) { mMin = value; }
+        void SetMin( SmartNodeArg<> gen ) { this->SetSourceMemberVariable( mMin, gen ); }
+        void SetMax( float value ) { mMax = value; }
+        void SetMax( SmartNodeArg<> gen ) { this->SetSourceMemberVariable( mMax, gen ); }
+
+    protected:
+        GeneratorSource mSource;
+        HybridSource mMin = -1.0f;
+        HybridSource mMax = 1.0f;
+
+        template<typename T>
+        friend struct MetadataT;
+    };
+
+#ifdef FASTNOISE_METADATA
+    template<>
+    struct MetadataT<Clamp> : MetadataT<Generator>
+    {
+        SmartNode<> CreateNode( FastSIMD::FeatureSet ) const override;
+
+        MetadataT()
+        {
+            groups.push_back( "Modifiers" );
+            this->AddGeneratorSource( "Source", &Clamp::SetSource );
+            this->AddHybridSource( { "Min", "Lower bound; output is never below this" }, -1.0f, &Clamp::SetMin, &Clamp::SetMin );
+            this->AddHybridSource( { "Max", "Upper bound; output is never above this" }, 1.0f, &Clamp::SetMax, &Clamp::SetMax );
+
+            description =
+                "Clamps the source value into the [Min, Max] range";
+        }
+    };
+#endif
+
     class ConvertRGBA8 : public virtual Generator
     {
     public:

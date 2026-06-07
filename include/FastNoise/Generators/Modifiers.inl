@@ -145,6 +145,24 @@ class FastSIMD::DispatchClass<Ramp, SIMD> final : public virtual Ramp, public Di
 };
 
 template<FastSIMD::FeatureSet SIMD>
+class FastSIMD::DispatchClass<Clamp, SIMD> final : public virtual Clamp, public DispatchClass<Generator, SIMD>
+{
+    FASTNOISE_IMPL_GEN_T;
+
+    template<typename... P>
+    FS_FORCEINLINE float32v GenT( int32v seed, P... pos ) const
+    {
+        float32v source = this->GetSourceValue( mSource, seed, pos... );
+        float32v min = this->GetSourceValue( mMin, seed, pos... );
+        float32v max = this->GetSourceValue( mMax, seed, pos... );
+
+        source = FS::Max( source, min );
+        source = FS::Min( source, max );
+        return source;
+    }
+};
+
+template<FastSIMD::FeatureSet SIMD>
 class FastSIMD::DispatchClass<ConvertRGBA8, SIMD> final : public virtual ConvertRGBA8, public DispatchClass<Generator, SIMD>
 {
     FASTNOISE_IMPL_GEN_T;

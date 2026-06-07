@@ -805,3 +805,111 @@ class FastSIMD::DispatchClass<CellularLookup, SIMD> final : public virtual Cellu
         return this->GetSourceValue( mLookup, sourceSeed - int32v( -1 ), cellX * float32v( mScale ), cellY * float32v( mScale ), cellZ * float32v( mScale ), cellW * float32v( mScale ) );
     }
 };
+
+template<FastSIMD::FeatureSet SIMD>
+class FastSIMD::DispatchClass<SdfSphere, SIMD> final : public virtual SdfSphere, public DispatchClass<Seeded<ScalableGenerator>, SIMD>
+{
+    float32v FS_VECTORCALL Gen( int32v seed, float32v x, float32v y ) const
+    {
+        seed += int32v( this->mSeedOffset );
+        float32v jitter = this->GetSourceValue( mJitter, seed, x, y );
+        float32v radius = this->GetSourceValue( mRadius, seed, x, y );
+
+        this->ScalePositions( x, y );
+
+        int32v xc = FS::Convert<int32_t>( x ) + int32v( -1 );
+        int32v ycBase = FS::Convert<int32_t>( y ) + int32v( -1 );
+
+        // Offset from the sample to each candidate cell's origin, in scaled space.
+        float32v xcf = FS::Convert<float>( xc ) - x;
+        float32v ycfBase = FS::Convert<float>( ycBase ) - y;
+
+        xc *= int32v( Primes::X );
+        ycBase *= int32v( Primes::Y );
+
+        float32v minDistSq( kInfinity );
+
+        for( int xi = 0; xi < 3; xi++ )
+        {
+            float32v ycf = ycfBase;
+            int32v yc = ycBase;
+            for( int yi = 0; yi < 3; yi++ )
+            {
+                int32v hash = HashPrimesHB( seed, xc, yc );
+                // Per-axis random offset in [-0.5, 0.5], scaled by jitter.
+                float32v ox = FS::FMulAdd( FS::Convert<float>( hash & int32v( 0x7ff ) ), float32v( 1.0f / 0x7ff ), float32v( -0.5f ) );
+                float32v oy = FS::FMulAdd( FS::Convert<float>( FS::BitShiftRightZeroExtend( hash, 21 ) ), float32v( 1.0f / 0x7ff ), float32v( -0.5f ) );
+
+                // Vector from the sample to the sphere centre (cell origin + 0.5 + jittered offset).
+                float32v dx = xcf + float32v( 0.5f ) + ox * jitter;
+                float32v dy = ycf + float32v( 0.5f ) + oy * jitter;
+
+                minDistSq = FS::Min( minDistSq, FS::FMulAdd( dx, dx, dy * dy ) );
+
+                ycf += float32v( 1 );
+                yc += int32v( Primes::Y );
+            }
+            xcf += float32v( 1 );
+            xc += int32v( Primes::X );
+        }
+
+        // Nearest distance back to world units, then signed distance to the surface.
+        return FS::Sqrt( minDistSq ) * float32v( this->mScale ) - radius;
+    }
+
+    float32v FS_VECTORCALL Gen( int32v seed, float32v x, float32v y, float32v z ) const
+    {
+        seed += int32v( this->mSeedOffset );
+        float32v jitter = this->GetSourceValue( mJitter, seed, x, y, z );
+        float32v radius = this->GetSourceValue( mRadius, seed, x, y, z );
+
+        this->ScalePositions( x, y, z );
+
+        int32v xc = FS::Convert<int32_t>( x ) + int32v( -1 );
+        int32v ycBase = FS::Convert<int32_t>( y ) + int32v( -1 );
+        int32v zcBase = FS::Convert<int32_t>( z ) + int32v( -1 );
+
+        float32v xcf = FS::Convert<float>( xc ) - x;
+        float32v ycfBase = FS::Convert<float>( ycBase ) - y;
+        float32v zcfBase = FS::Convert<float>( zcBase ) - z;
+
+        xc *= int32v( Primes::X );
+        ycBase *= int32v( Primes::Y );
+        zcBase *= int32v( Primes::Z );
+
+        float32v minDistSq( kInfinity );
+
+        for( int xi = 0; xi < 3; xi++ )
+        {
+            float32v ycf = ycfBase;
+            int32v yc = ycBase;
+            for( int yi = 0; yi < 3; yi++ )
+            {
+                float32v zcf = zcfBase;
+                int32v zc = zcBase;
+                for( int zi = 0; zi < 3; zi++ )
+                {
+                    int32v hash = HashPrimesHB( seed, xc, yc, zc );
+                    float32v ox = FS::FMulAdd( FS::Convert<float>( hash & int32v( 0x3ff ) ), float32v( 1.0f / 0x3ff ), float32v( -0.5f ) );
+                    float32v oy = FS::FMulAdd( FS::Convert<float>( ( hash >> 11 ) & int32v( 0x3ff ) ), float32v( 1.0f / 0x3ff ), float32v( -0.5f ) );
+                    float32v oz = FS::FMulAdd( FS::Convert<float>( FS::BitShiftRightZeroExtend( hash, 22 ) ), float32v( 1.0f / 0x3ff ), float32v( -0.5f ) );
+
+                    float32v dx = xcf + float32v( 0.5f ) + ox * jitter;
+                    float32v dy = ycf + float32v( 0.5f ) + oy * jitter;
+                    float32v dz = zcf + float32v( 0.5f ) + oz * jitter;
+
+                    minDistSq = FS::Min( minDistSq, FS::FMulAdd( dx, dx, FS::FMulAdd( dy, dy, dz * dz ) ) );
+
+                    zcf += float32v( 1 );
+                    zc += int32v( Primes::Z );
+                }
+                ycf += float32v( 1 );
+                yc += int32v( Primes::Y );
+            }
+            xcf += float32v( 1 );
+            xc += int32v( Primes::X );
+        }
+
+        return FS::Sqrt( minDistSq ) * float32v( this->mScale ) - radius;
+    }
+};

@@ -152,9 +152,50 @@ namespace FastNoise
         {
             this->AddGeneratorSource( { "Lookup", "Used to generate cell values" }, &CellularLookup::SetLookup );
             
-            description = 
+            description =
                 "Returns value of closest cell\n"
                 "Value is generated at the cell center using the lookup source";
+        }
+    };
+#endif
+
+    // Signed distance field to a grid of domain-repeated spheres. Like the
+    // Cellular nodes it walks a 3x3(x3) neighbourhood of grid cells, but instead
+    // of cell-edge distances it returns the nearest sphere-surface distance.
+    class SdfSphere : public virtual Seeded<ScalableGenerator>
+    {
+    public:
+        const Metadata& GetMetadata() const override;
+
+        void SetRadius( float value ) { mRadius = value; }
+        void SetRadius( SmartNodeArg<> gen ) { this->SetSourceMemberVariable( mRadius, gen ); }
+        void SetJitter( float value ) { mJitter = value; }
+        void SetJitter( SmartNodeArg<> gen ) { this->SetSourceMemberVariable( mJitter, gen ); }
+
+    protected:
+        HybridSource mRadius = 40.0f;
+        HybridSource mJitter = 1.0f;
+    };
+
+#ifdef FASTNOISE_METADATA
+    template<>
+    struct MetadataT<SdfSphere> : MetadataT<Seeded<ScalableGenerator>>
+    {
+        SmartNode<> CreateNode( FastSIMD::FeatureSet ) const override;
+
+        MetadataT()
+        {
+            groups.push_back( "Coherent Noise" );
+            this->AddHybridSource( { "Radius", "Sphere radius in world units" },
+                40.0f, &SdfSphere::SetRadius, &SdfSphere::SetRadius );
+            this->AddHybridSource( { "Jitter", "Random offset of each sphere from its cell centre\n"
+                                              "0 = perfect grid, 1 = up to half a cell" },
+                1.0f, &SdfSphere::SetJitter, &SdfSphere::SetJitter );
+
+            description =
+                "Signed distance to a grid of domain-repeated spheres\n"
+                "Cell spacing is set by Feature Scale; each sphere is randomly offset within its cell\n"
+                "Negative inside a sphere, positive outside (world-space distance)";
         }
     };
 #endif
